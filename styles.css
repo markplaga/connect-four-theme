@@ -30,7 +30,7 @@
       transition: background .35s ease, color .35s ease;
     }
 
-    button, select, textarea { font: inherit; }
+    button, select, textarea, input { font: inherit; }
     button { color: inherit; }
 
     .app {
@@ -68,7 +68,7 @@
       text-transform: uppercase;
     }
 
-    select, textarea {
+    select, textarea, input {
       width: 100%;
       color: var(--text);
       background: color-mix(in srgb, var(--page-a) 75%, transparent);
@@ -85,7 +85,7 @@
       font-size: .78rem;
       line-height: 1.42;
     }
-    select:focus, textarea:focus, button:focus-visible {
+    select:focus, textarea:focus, input:focus, button:focus-visible {
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
       border-color: var(--accent);
     }
@@ -261,6 +261,33 @@
     }
     .help { color: var(--muted); font-size: .86rem; line-height: 1.45; margin: 0; }
     .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .room-controls { display: grid; gap: 10px; }
+    .room-divider { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: .78rem; }
+    .room-divider::before, .room-divider::after { content: ""; height: 1px; flex: 1; background: var(--panel-border); }
+    .room-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .room-code-input {
+      min-width: 0;
+      padding: 11px 12px;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      font-weight: 900;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .active-room {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: rgba(0,0,0,.14);
+    }
+    .active-room strong {
+      font-size: clamp(2rem, 8vw, 3.1rem);
+      letter-spacing: .16em;
+      line-height: 1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
 
     .online-panel { display: none; }
     .online-panel.visible { display: grid; gap: 12px; }
