@@ -12,7 +12,7 @@
     <header class="topbar">
       <div class="brand">
         <h1>Connect Four</h1>
-        <p>Pass and play on one device, or connect two browsers online.</p>
+        <p>Pass and play on one device, or share a room code to play online.</p>
       </div>
       <div class="theme-wrap">
         <label for="themeSelect">Board theme</label>
@@ -74,41 +74,27 @@
           <div class="online-panel" id="onlinePanel">
             <div class="online-status"><span class="dot" id="connectionDot"></span><span id="connectionText">Not connected</span></div>
 
-            <div class="controls" id="onlineChoice">
-              <button class="btn primary" id="hostBtn">Host game</button>
-              <button class="btn" id="joinBtn">Join game</button>
-            </div>
-
-            <div class="steps hidden" id="hostSteps">
-              <div class="step">
-                <strong>1. Send this host code to Player 2</strong>
-                <textarea id="hostOffer" readonly aria-label="Host connection code"></textarea>
-                <button class="btn small" data-copy="hostOffer">Copy host code</button>
-              </div>
-              <div class="step">
-                <strong>2. Paste Player 2's answer code</strong>
-                <textarea id="hostAnswer" aria-label="Player 2 answer code"></textarea>
-                <button class="btn small primary" id="acceptAnswerBtn">Connect</button>
+            <div id="onlineChoice" class="room-controls">
+              <button class="btn primary" id="createRoomBtn">Create room</button>
+              <div class="room-divider"><span>or</span></div>
+              <label for="roomCode">Room code</label>
+              <div class="room-entry">
+                <input id="roomCode" class="room-code-input" inputmode="text" autocomplete="off" maxlength="6" placeholder="ABC234" aria-label="Six-character room code" />
+                <button class="btn" id="joinRoomBtn">Join room</button>
               </div>
             </div>
 
-            <div class="steps hidden" id="joinSteps">
-              <div class="step">
-                <strong>1. Paste Player 1's host code</strong>
-                <textarea id="joinOffer" aria-label="Host connection code"></textarea>
-                <button class="btn small primary" id="makeAnswerBtn">Create answer</button>
-              </div>
-              <div class="step hidden" id="answerStep">
-                <strong>2. Send this answer code back to Player 1</strong>
-                <textarea id="joinAnswer" readonly aria-label="Answer connection code"></textarea>
-                <button class="btn small" data-copy="joinAnswer">Copy answer code</button>
-              </div>
+            <div class="active-room hidden" id="activeRoom">
+              <span class="eyebrow">Your room code</span>
+              <strong id="activeRoomCode">------</strong>
+              <button class="btn small" id="copyRoomBtn">Copy code</button>
+              <p class="help">Send this code to the other player. They only need to enter it and tap Join room.</p>
             </div>
 
-            <button class="btn danger small hidden" id="disconnectBtn">Disconnect</button>
+            <button class="btn danger small hidden" id="disconnectBtn">Leave room</button>
           </div>
-          <p class="help" id="onlineHint">Switch to Online mode to connect two browsers.</p>
-          <p class="footer-note">Online play uses a direct WebRTC connection. No account or game server is required. Some restrictive networks may block peer-to-peer connections.</p>
+          <p class="help" id="onlineHint">Switch to Online mode to create or join a private room.</p>
+          <p class="footer-note">Rooms expire after 24 hours. Your private player token stays in this browser tab so a refresh can reconnect you.</p>
         </section>
       </aside>
     </section>
