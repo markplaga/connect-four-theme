@@ -1,33 +1,58 @@
 # Connect Four — Ten Themes
 
-A two-player Connect Four web game with:
+A responsive two-player Connect Four browser game with pass-and-play and private online rooms.
 
-- Pass-and-play mode on one device
-- Direct browser-to-browser online mode using WebRTC
+## Features
+
+- Pass-and-play on one device
+- Online play with one six-character room code
 - Ten board and piece-color themes
+- Server-validated turns, moves, wins, draws, resets, undo, and theme changes
+- Private player tokens stored in the browser session
+- Automatic reconnection after refreshing the same browser tab
+- Rooms expire after 24 hours
 - Responsive desktop and mobile layout
-- Keyboard controls (number keys 1–7)
-- Win detection, draw detection, undo, and rematch
-- No framework, build step, account, or game server required
+- Keyboard controls with number keys 1–7
 
-## Run locally
+## Online architecture
 
-Open `index.html` directly in a browser, or serve the folder with any static web server.
+The online mode follows the same model as the Battleship game:
 
-Example:
+- The static interface can be hosted on GitHub Pages or Netlify.
+- A Netlify Function at `netlify/functions/room.ts` creates and manages rooms.
+- Netlify Blobs stores expiring room state.
+- Player 1 creates a room and sends the six-character code to Player 2.
+- Player 2 enters only that room code and joins.
 
-```bash
-python3 -m http.server 8000
+When the frontend is served from `markplaga.github.io`, it uses:
+
+```text
+https://connect-four-theme.netlify.app/api/room
 ```
 
-Then visit `http://localhost:8000`.
+For another frontend host, set `window.CONNECT_FOUR_API_ORIGIN` before loading `game-online.js`.
 
-## Online match instructions
+## Local development
 
-1. Both players open the game.
-2. Player 1 selects **Online → Host game** and sends the generated host code to Player 2.
-3. Player 2 selects **Online → Join game**, pastes the host code, and creates an answer code.
-4. Player 2 sends the answer code back to Player 1.
-5. Player 1 pastes the answer code and selects **Connect**.
+Requires Node.js 20 or newer.
 
-The game uses public STUN servers for peer discovery. WebRTC may fail on some restrictive corporate, school, or carrier networks because this static version does not include a TURN relay server.
+```bash
+npm install
+npm run dev
+```
+
+Netlify Dev serves the game and `/api/room` together.
+
+## Checks
+
+```bash
+npm run check
+```
+
+## Deploy
+
+Link this repository to a Netlify site and deploy:
+
+```bash
+npm run deploy
+```
