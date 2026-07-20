@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#10233f" />
+  <title>Connect Four — Ten Themes</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Connect Four</h1>
+        <p>Pass and play on one device, or connect two browsers online.</p>
+      </div>
+      <div class="theme-wrap">
+        <label for="themeSelect">Board theme</label>
+        <select id="themeSelect" aria-label="Choose board theme"></select>
+      </div>
+    </header>
+
+    <section class="layout">
+      <div class="game-card">
+        <div class="mode-row" aria-label="Game mode">
+          <button class="btn active" id="localModeBtn">Pass &amp; Play</button>
+          <button class="btn" id="onlineModeBtn">Online</button>
+        </div>
+
+        <div class="statusbar" aria-live="polite">
+          <div class="status-main">
+            <span class="turn-disc" id="turnDisc"></span>
+            <span id="statusText">Player 1's turn</span>
+          </div>
+          <div class="status-note" id="statusNote">Choose any column</div>
+        </div>
+
+        <div class="board-shell">
+          <div class="column-controls" id="columnControls" aria-label="Column controls"></div>
+          <div class="board" id="board" role="grid" aria-label="Connect Four board"></div>
+          <div class="board-foot"></div>
+        </div>
+
+        <div class="players">
+          <div class="player active" id="player1Card">
+            <span class="mini-disc p1"></span>
+            <div><strong id="player1Name">Player 1</strong><span id="player1Role">Yellow pieces</span></div>
+          </div>
+          <div class="player" id="player2Card">
+            <span class="mini-disc p2"></span>
+            <div><strong id="player2Name">Player 2</strong><span id="player2Role">Red pieces</span></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side-stack">
+        <section class="side-card">
+          <h2 class="section-title">Game controls</h2>
+          <div class="controls">
+            <button class="btn primary" id="newGameBtn">New game</button>
+            <button class="btn" id="undoBtn">Undo</button>
+          </div>
+          <p class="help" style="margin-top:10px">Tap a column, click a top arrow, or press number keys 1–7.</p>
+        </section>
+
+        <section class="side-card">
+          <h2 class="section-title">Ten themes</h2>
+          <p class="help">Each changes the board, background, and both piece colors.</p>
+          <div class="theme-grid" id="themeGrid"></div>
+        </section>
+
+        <section class="side-card online-wrap">
+          <h2 class="section-title">Online match</h2>
+          <div class="online-panel" id="onlinePanel">
+            <div class="online-status"><span class="dot" id="connectionDot"></span><span id="connectionText">Not connected</span></div>
+
+            <div class="controls" id="onlineChoice">
+              <button class="btn primary" id="hostBtn">Host game</button>
+              <button class="btn" id="joinBtn">Join game</button>
+            </div>
+
+            <div class="steps hidden" id="hostSteps">
+              <div class="step">
+                <strong>1. Send this host code to Player 2</strong>
+                <textarea id="hostOffer" readonly aria-label="Host connection code"></textarea>
+                <button class="btn small" data-copy="hostOffer">Copy host code</button>
+              </div>
+              <div class="step">
+                <strong>2. Paste Player 2's answer code</strong>
+                <textarea id="hostAnswer" aria-label="Player 2 answer code"></textarea>
+                <button class="btn small primary" id="acceptAnswerBtn">Connect</button>
+              </div>
+            </div>
+
+            <div class="steps hidden" id="joinSteps">
+              <div class="step">
+                <strong>1. Paste Player 1's host code</strong>
+                <textarea id="joinOffer" aria-label="Host connection code"></textarea>
+                <button class="btn small primary" id="makeAnswerBtn">Create answer</button>
+              </div>
+              <div class="step hidden" id="answerStep">
+                <strong>2. Send this answer code back to Player 1</strong>
+                <textarea id="joinAnswer" readonly aria-label="Answer connection code"></textarea>
+                <button class="btn small" data-copy="joinAnswer">Copy answer code</button>
+              </div>
+            </div>
+
+            <button class="btn danger small hidden" id="disconnectBtn">Disconnect</button>
+          </div>
+          <p class="help" id="onlineHint">Switch to Online mode to connect two browsers.</p>
+          <p class="footer-note">Online play uses a direct WebRTC connection. No account or game server is required. Some restrictive networks may block peer-to-peer connections.</p>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="game-core.js"></script>
+  <script src="game-online.js"></script>
+</body>
+</html>
