@@ -1,0 +1,23 @@
+{
+  "name": "connect-four-theme",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx netlify dev",
+    "deploy": "npx netlify deploy --prod",
+    "check:js": "node --check game-core.js && node --check game-online.js",
+    "check:types": "tsc --noEmit",
+    "check": "npm run check:js && npm run check:types"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@netlify/blobs": "10.7.9",
+    "@netlify/functions": "5.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
