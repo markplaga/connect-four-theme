@@ -1,212 +1,326 @@
-    function createPeer() {
-      if (pc) pc.close();
-      pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      });
-      pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'connected') {
-          connected = true;
-          setConnectionState('connected', 'Connected — game ready');
-          $('disconnectBtn').classList.remove('hidden');
-          $('onlineChoice').classList.add('hidden');
-          newGame(false);
-          updateOnlineNames();
-          if (onlineRole === 'host') send({ type:'theme', themeIndex });
-        } else if (['failed','disconnected','closed'].includes(pc.connectionState)) {
-          connected = false;
-          setConnectionState('error', pc.connectionState === 'failed' ? 'Connection failed' : 'Disconnected');
-          render();
-        } else {
-          setConnectionState('connecting', `Connection: ${pc.connectionState}`);
-        }
-      };
-      return pc;
-    }
+const ONLINE_SESSION_KEY = 'connect-four-online-session-v1';
+const API_ORIGIN = (() => {
+  const configured = String(window.CONNECT_FOUR_API_ORIGIN || '').trim();
+  if (configured) return configured.replace(/\/$/, '');
+  if (location.hostname === 'markplaga.github.io') return 'https://connect-four-theme.netlify.app';
+  return '';
+})();
 
-    function attachChannel(ch) {
-      channel = ch;
-      channel.onopen = () => {
-        connected = true;
-        setConnectionState('connected', 'Connected — game ready');
-        $('disconnectBtn').classList.remove('hidden');
-        $('onlineChoice').classList.add('hidden');
-        newGame(false);
-        updateOnlineNames();
-        if (onlineRole === 'host') send({ type:'theme', themeIndex });
-      };
-      channel.onclose = () => {
-        connected = false;
-        setConnectionState('error', 'Disconnected');
-        render();
-      };
-      channel.onerror = () => setConnectionState('error', 'Connection error');
-      channel.onmessage = event => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'move') makeMove(Number(data.col), true);
-          if (data.type === 'reset') newGame(false);
-          if (data.type === 'undo') undo(false);
-          if (data.type === 'theme') applyTheme(Number(data.themeIndex), false);
-        } catch (error) {
-          console.error(error);
-        }
-      };
-    }
+let onlineCode = '';
+let onlineToken = '';
+let pollTimer = null;
+let requestBusy = false;
+let lastEventId = '';
 
-    function send(payload) {
-      if (channel?.readyState === 'open') channel.send(JSON.stringify(payload));
-    }
+function apiUrl(path) {
+  return `${API_ORIGIN}${path}`;
+}
 
-    function updateOnlineNames() {
-      $('player1Name').textContent = onlineRole === 'host' ? 'You — Player 1' : 'Opponent — Player 1';
-      $('player2Name').textContent = onlineRole === 'guest' ? 'You — Player 2' : 'Opponent — Player 2';
-      render();
-    }
+function saveOnlineSession() {
+  if (!onlineCode || !onlineToken || !onlineRole) return;
+  try {
+    sessionStorage.setItem(ONLINE_SESSION_KEY, JSON.stringify({
+      code: onlineCode,
+      token: onlineToken,
+      role: onlineRole
+    }));
+  } catch {}
+}
 
-    function waitForIceComplete(peer) {
-      return new Promise(resolve => {
-        if (peer.iceGatheringState === 'complete') return resolve();
-        const handler = () => {
-          if (peer.iceGatheringState === 'complete') {
-            peer.removeEventListener('icegatheringstatechange', handler);
-            resolve();
-          }
-        };
-        peer.addEventListener('icegatheringstatechange', handler);
-        setTimeout(resolve, 6000);
-      });
-    }
+function loadOnlineSession() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(ONLINE_SESSION_KEY) || 'null');
+    if (!value || !/^[A-Z2-9]{6}$/.test(String(value.code || '')) || !value.token) return null;
+    return {
+      code: String(value.code).toUpperCase(),
+      token: String(value.token),
+      role: value.role === 'guest' ? 'guest' : 'host'
+    };
+  } catch {
+    return null;
+  }
+}
 
-    function encodeDescription(desc) {
-      const json = JSON.stringify({ type: desc.type, sdp: desc.sdp });
-      return btoa(unescape(encodeURIComponent(json)));
-    }
-    function decodeDescription(code) {
-      const json = decodeURIComponent(escape(atob(code.trim())));
-      return JSON.parse(json);
-    }
+function clearOnlineSession() {
+  try { sessionStorage.removeItem(ONLINE_SESSION_KEY); } catch {}
+}
 
-    async function hostGame() {
-      try {
-        disconnect(false);
-        setMode('online');
-        onlineRole = 'host';
-        updateOnlineNames();
-        $('hostSteps').classList.remove('hidden');
-        $('joinSteps').classList.add('hidden');
-        setConnectionState('connecting', 'Creating host code…');
-        const peer = createPeer();
-        attachChannel(peer.createDataChannel('connect-four'));
-        await peer.setLocalDescription(await peer.createOffer());
-        await waitForIceComplete(peer);
-        $('hostOffer').value = encodeDescription(peer.localDescription);
-        setConnectionState('connecting', 'Send the host code to Player 2');
-      } catch (error) {
-        console.error(error);
-        setConnectionState('error', 'Could not create host game');
-        toast('Could not create a host code.');
-      }
-    }
+function updateOnlineNames() {
+  $('player1Name').textContent = onlineRole === 'host' ? 'You — Player 1' : onlineRole === 'guest' ? 'Opponent — Player 1' : 'Player 1';
+  $('player2Name').textContent = onlineRole === 'guest' ? 'You — Player 2' : onlineRole === 'host' ? 'Opponent — Player 2' : 'Player 2';
+}
 
-    async function joinGame() {
-      disconnect(false);
-      setMode('online');
-      onlineRole = 'guest';
-      updateOnlineNames();
-      $('joinSteps').classList.remove('hidden');
-      $('hostSteps').classList.add('hidden');
-      $('answerStep').classList.add('hidden');
-      setConnectionState('', 'Paste the host code');
-    }
+function showRoom(remote) {
+  const active = Boolean(onlineCode && onlineToken);
+  $('onlineChoice').classList.toggle('hidden', active);
+  $('activeRoom').classList.toggle('hidden', !active);
+  $('disconnectBtn').classList.toggle('hidden', !active);
+  $('activeRoomCode').textContent = onlineCode || '------';
+  if (!active) {
+    setConnectionState('', 'Not connected');
+    return;
+  }
+  if (remote?.playerCount === 2) {
+    setConnectionState('connected', `Room ${onlineCode} — game ready`);
+  } else {
+    setConnectionState('connecting', `Room ${onlineCode} — waiting for Player 2`);
+  }
+}
 
-    async function makeAnswer() {
-      try {
-        const offerCode = $('joinOffer').value.trim();
-        if (!offerCode) return toast('Paste the host code first.');
-        setConnectionState('connecting', 'Creating answer code…');
-        const peer = createPeer();
-        peer.ondatachannel = event => attachChannel(event.channel);
-        await peer.setRemoteDescription(decodeDescription(offerCode));
-        await peer.setLocalDescription(await peer.createAnswer());
-        await waitForIceComplete(peer);
-        $('joinAnswer').value = encodeDescription(peer.localDescription);
-        $('answerStep').classList.remove('hidden');
-        setConnectionState('connecting', 'Send the answer code to Player 1');
-      } catch (error) {
-        console.error(error);
-        setConnectionState('error', 'Invalid host code');
-        toast('That host code could not be read.');
-      }
-    }
+function syncRoom(remote) {
+  if (!remote) return;
+  const event = remote.lastEvent;
+  if (event?.id && event.id !== lastEventId) {
+    if (lastEventId && event.type === 'joined') toast('Player 2 joined the room.');
+    if (lastEventId && event.type === 'reset') toast('A new game started.');
+    if (lastEventId && event.type === 'undo') toast('The last move was undone.');
+    lastEventId = event.id;
+  }
+  syncOnlineState(remote);
+  showRoom(remote);
+  updateOnlineNames();
+}
 
-    async function acceptAnswer() {
-      try {
-        const answerCode = $('hostAnswer').value.trim();
-        if (!answerCode) return toast("Paste Player 2's answer code first.");
-        setConnectionState('connecting', 'Connecting…');
-        await pc.setRemoteDescription(decodeDescription(answerCode));
-      } catch (error) {
-        console.error(error);
-        setConnectionState('error', 'Invalid answer code');
-        toast('That answer code could not be read.');
-      }
-    }
+async function createRoom() {
+  if (requestBusy) return;
+  requestBusy = true;
+  setMode('online');
+  setConnectionState('connecting', 'Creating room…');
+  $('createRoomBtn').disabled = true;
+  try {
+    const data = await api('/api/room', { action: 'create', themeIndex });
+    onlineCode = data.code;
+    onlineToken = data.token;
+    onlineRole = 'host';
+    lastEventId = data.state?.lastEvent?.id || '';
+    saveOnlineSession();
+    window.history.replaceState({}, '', `${location.pathname}?room=${onlineCode}`);
+    syncRoom(data.state);
+    startPolling();
+    toast(`Room ${onlineCode} created.`);
+  } catch (error) {
+    setConnectionState('error', 'Could not create room');
+    toast(error instanceof Error ? error.message : 'Unable to create the room.');
+  } finally {
+    requestBusy = false;
+    $('createRoomBtn').disabled = false;
+  }
+}
 
-    function disconnect(resetUI = true) {
-      connected = false;
-      try { channel?.close(); } catch {}
-      try { pc?.close(); } catch {}
-      channel = null;
-      pc = null;
-      if (resetUI) {
-        onlineRole = null;
-        $('onlineChoice').classList.remove('hidden');
-        $('hostSteps').classList.add('hidden');
-        $('joinSteps').classList.add('hidden');
-        $('disconnectBtn').classList.add('hidden');
-        $('hostOffer').value = '';
-        $('hostAnswer').value = '';
-        $('joinOffer').value = '';
-        $('joinAnswer').value = '';
-        setConnectionState('', 'Not connected');
-        newGame(false);
-        updateOnlineNames();
-      }
-    }
+async function joinRoom() {
+  if (requestBusy) return;
+  const code = $('roomCode').value.trim().toUpperCase();
+  if (!/^[A-Z2-9]{6}$/.test(code)) return toast('Enter the six-character room code.');
+  requestBusy = true;
+  setMode('online');
+  setConnectionState('connecting', `Joining ${code}…`);
+  $('joinRoomBtn').disabled = true;
+  try {
+    const data = await api('/api/room', { action: 'join', code });
+    onlineCode = data.code;
+    onlineToken = data.token;
+    onlineRole = 'guest';
+    lastEventId = data.state?.lastEvent?.id || '';
+    saveOnlineSession();
+    window.history.replaceState({}, '', `${location.pathname}?room=${onlineCode}`);
+    syncRoom(data.state);
+    startPolling();
+    toast(`Joined room ${onlineCode}.`);
+  } catch (error) {
+    setConnectionState('error', 'Could not join room');
+    toast(error instanceof Error ? error.message : 'Unable to join the room.');
+  } finally {
+    requestBusy = false;
+    $('joinRoomBtn').disabled = false;
+  }
+}
 
-    $('themeSelect').addEventListener('change', e => applyTheme(e.target.value, true));
-    $('localModeBtn').addEventListener('click', () => { disconnect(); setMode('local'); });
-    $('onlineModeBtn').addEventListener('click', () => setMode('online'));
-    $('newGameBtn').addEventListener('click', () => newGame(true));
-    $('undoBtn').addEventListener('click', () => undo(true));
-    $('hostBtn').addEventListener('click', hostGame);
-    $('joinBtn').addEventListener('click', joinGame);
-    $('makeAnswerBtn').addEventListener('click', makeAnswer);
-    $('acceptAnswerBtn').addEventListener('click', acceptAnswer);
-    $('disconnectBtn').addEventListener('click', () => disconnect(true));
+async function resumeOnlineSession() {
+  const saved = loadOnlineSession();
+  const requestedRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
+  if (!saved) {
+    if (requestedRoom) $('roomCode').value = requestedRoom;
+    return false;
+  }
+  if (requestedRoom && requestedRoom !== saved.code) {
+    clearOnlineSession();
+    $('roomCode').value = requestedRoom;
+    return false;
+  }
 
-    document.addEventListener('click', async event => {
-      const target = event.target.closest('[data-copy]');
-      if (!target) return;
-      const source = $(target.dataset.copy);
-      try {
-        await navigator.clipboard.writeText(source.value);
-        toast('Copied to clipboard.');
-      } catch {
-        source.select();
-        document.execCommand('copy');
-        toast('Copied to clipboard.');
-      }
+  onlineCode = saved.code;
+  onlineToken = saved.token;
+  onlineRole = saved.role;
+  setMode('online');
+  showRoom();
+  try {
+    const remote = await api('/api/room', {
+      action: 'state',
+      code: onlineCode,
+      token: onlineToken
     });
+    lastEventId = remote.lastEvent?.id || '';
+    syncRoom(remote);
+    startPolling();
+    return true;
+  } catch {
+    disconnectRoom(true);
+    return false;
+  }
+}
 
-    document.addEventListener('keydown', event => {
-      if (/^[1-7]$/.test(event.key) && !['TEXTAREA','SELECT','INPUT'].includes(document.activeElement.tagName)) {
-        handleColumn(Number(event.key) - 1);
-      }
+async function onlineMove(col) {
+  if (requestBusy) return;
+  requestBusy = true;
+  try {
+    const remote = await api('/api/room', {
+      action: 'move',
+      code: onlineCode,
+      token: onlineToken,
+      col
     });
+    syncRoom(remote);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'The move could not be recorded.');
+    await pollRoom();
+  } finally {
+    requestBusy = false;
+  }
+}
 
-    window.addEventListener('beforeunload', () => disconnect(false));
-    buildUI();
+async function onlineReset() {
+  if (!onlineCode || !onlineToken || requestBusy) return;
+  requestBusy = true;
+  try {
+    const remote = await api('/api/room', {
+      action: 'reset',
+      code: onlineCode,
+      token: onlineToken
+    });
+    syncRoom(remote);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Could not start a new game.');
+  } finally {
+    requestBusy = false;
+  }
+}
+
+async function onlineUndo() {
+  if (!onlineCode || !onlineToken || requestBusy) return;
+  requestBusy = true;
+  try {
+    const remote = await api('/api/room', {
+      action: 'undo',
+      code: onlineCode,
+      token: onlineToken
+    });
+    syncRoom(remote);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Could not undo the move.');
+  } finally {
+    requestBusy = false;
+  }
+}
+
+async function onlineSetTheme(nextThemeIndex) {
+  if (!onlineCode || !onlineToken || requestBusy) return;
+  try {
+    const remote = await api('/api/room', {
+      action: 'theme',
+      code: onlineCode,
+      token: onlineToken,
+      themeIndex: nextThemeIndex
+    });
+    syncRoom(remote);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Could not change the room theme.');
+  }
+}
+
+async function pollRoom() {
+  if (!onlineCode || !onlineToken || mode !== 'online') return;
+  try {
+    const remote = await api('/api/room', {
+      action: 'state',
+      code: onlineCode,
+      token: onlineToken
+    });
+    syncRoom(remote);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function startPolling() {
+  clearPolling();
+  pollTimer = setInterval(pollRoom, 1200);
+}
+
+function clearPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+function disconnectRoom(clearUrl = true) {
+  clearPolling();
+  clearOnlineSession();
+  onlineCode = '';
+  onlineToken = '';
+  onlineRole = null;
+  connected = false;
+  lastEventId = '';
+  showRoom();
+  updateOnlineNames();
+  resetLocalBoard();
+  if (clearUrl) window.history.replaceState({}, '', location.pathname);
+}
+
+async function api(path, body) {
+  let response;
+  try {
+    response = await fetch(apiUrl(path), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store'
+    });
+  } catch {
+    throw new Error('Unable to reach the online game server.');
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'The game server did not respond.');
+  return data;
+}
+
+$('themeSelect').addEventListener('change', event => applyTheme(event.target.value, true));
+$('localModeBtn').addEventListener('click', () => { disconnectRoom(); setMode('local'); });
+$('onlineModeBtn').addEventListener('click', () => setMode('online'));
+$('newGameBtn').addEventListener('click', () => newGame(true));
+$('undoBtn').addEventListener('click', () => undo(true));
+$('createRoomBtn').addEventListener('click', createRoom);
+$('joinRoomBtn').addEventListener('click', joinRoom);
+$('disconnectBtn').addEventListener('click', () => disconnectRoom(true));
+$('roomCode').addEventListener('input', event => {
+  event.target.value = event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 6);
+});
+$('roomCode').addEventListener('keydown', event => {
+  if (event.key === 'Enter') joinRoom();
+});
+$('copyRoomBtn').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(onlineCode);
+    toast('Room code copied.');
+  } catch {
+    toast(`Room code: ${onlineCode}`);
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (/^[1-7]$/.test(event.key) && !['TEXTAREA', 'SELECT', 'INPUT'].includes(document.activeElement.tagName)) {
+    handleColumn(Number(event.key) - 1);
+  }
+});
+
+window.addEventListener('beforeunload', clearPolling);
+buildUI();
+resumeOnlineSession();
